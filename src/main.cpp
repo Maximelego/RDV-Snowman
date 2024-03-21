@@ -13,7 +13,7 @@ struct Sphere {
     Vec3f center;
     float radius;
 
-    Sphere(const Vec3f &c, const float &r) : center(c), radius(r) {}
+    Sphere(const Vec3f &c, const float r) : center(c), radius(r) {}
 };
 
 const float noise_amplitude = NOISE_LEVEL  ;  // amount of noise applied to the sphere (towards the center)
@@ -74,31 +74,33 @@ Vec3f palette_snow(const float d) { // simple linear gradient yellow-orange-red-
 
 // This function defines the implicit surface we render
 float signed_distance_to_sphere(const Vec3f &p, const Sphere &sphere) {
-    Vec3f centered_p = p - sphere.center;       // Subtract the sphere's center from the point
-    float displacement = -fractal_brownian_motion(centered_p * 3.4) * noise_amplitude;
-    return centered_p.norm() - (sphere.radius + displacement);
+    Vec3f p_diff = p + sphere.center; 
+    float displacement = -fractal_brownian_motion(p_diff * 3.4) * noise_amplitude;
+    return p_diff.norm() - sphere.radius;
 }
 
+// Simple finite differences, very sensitive to the choice of the eps constant
 Vec3f distance_field_normal(const Vec3f &pos, Sphere sphere) {
-    // Simple finite differences, very sensitive to the choice of the eps constant
     const float eps = EPS;
-    float d = signed_distance_to_sphere(pos, sphere);
+    float d  = signed_distance_to_sphere(pos, sphere);
     float nx = signed_distance_to_sphere(pos + Vec3f(eps, 0, 0), sphere) - d;
     float ny = signed_distance_to_sphere(pos + Vec3f(0, eps, 0), sphere) - d;
     float nz = signed_distance_to_sphere(pos + Vec3f(0, 0, eps), sphere) - d;
     return Vec3f(nx, ny, nz).normalize();
 }
 
+// This method tells if the ray starting from the origin hits the sphere profided.
+// If so, it saves te coordinates of the impact inside the pos vector.
 bool sphere_trace(const Vec3f &orig, const Vec3f &dir, Vec3f &pos, const Sphere &sphere) {
-    // Notice the early discard; in fact, I know that the noise() function produces non-negative values,
-    // thus all the explosion fits in the sphere. Thus this early discard is a conservative check.
-    // It is not necessary, just a small speed-up.
-    if ((pos - orig) * (pos - orig) - pow((pos - orig) * dir, 2) > pow(sphere.radius, 2)) return false;
-
-    pos = orig;
+    
+    pos = Vec3f(orig);
     for (size_t i = 0; i < 128; i++) {
+        // We compute de signed distance between our current position and the sphere.
         float d = signed_distance_to_sphere(pos, sphere);
-        if (d < 0) return true;
+
+        if (d <= 0.) return true; // We are inside the sphere.
+        // std::cout << d << std::endl;
+
         // Adjust the step based on the current position relative to the sphere's center
         Vec3f step = dir * std::max(d * 0.1f, .01f);
         pos = pos + step;
@@ -114,32 +116,35 @@ void render(const unsigned long width, const unsigned long height, float fov) {
 
     // SHAPES :
     // Base Sphere :
-    Sphere sphere(Vec3f(0.0, 0.0,0.0), BASE_SPHERE_RADIUS);
+    Vec3f center = Vec3f(0.0, 0.0, 0.0);
+    Sphere sphere(center, BASE_SPHERE_RADIUS);
     // Torso Sphere :
-    Sphere sphere1(Vec3f(0.0, 0.5,0.0), TORSO_SPHERE_RADIUS);
+    Sphere sphere1(Vec3f(0.0, 0.5, 0.0), TORSO_SPHERE_RADIUS);
     // Head Sphere :
-    Sphere sphere2(Vec3f(0.0, 1.0,0.0), HEAD_SPHERE_RADIUS);
+    Sphere sphere2(Vec3f(0.0, 1.0, 0.0), HEAD_SPHERE_RADIUS);
 
     for (size_t j = 0; j<height; j++) {
         for (size_t i = 0; i<width; i++) {
             // We define the direction that the ray will follow.
-            float dir_x =  (i + 0.5) -  width/2.0;
-            float dir_y = -(j + 0.5) +  height/2.0;    // this flips the image at the same time
-            float dir_z = -height/(2.0*tan(fov/2.0));
+            float dir_x =  0;// (i + 0.5) -  width/2.0;
+            float dir_y =  0; // -(j + 0.5) +  height/2.0;    // this flips the image at the same time
+            float dir_z =  1; //-height/(2.0*tan(fov/2.0));
             Vec3f hit;
 
             if (sphere_trace(Vec3f(CAMERA_X, CAMERA_Y, CAMERA_Z),
                              Vec3f(dir_x, dir_y, dir_z).normalize(),
-                             hit, sphere)) {
-                framebuffer[i+j*width] = Vec3f(0.5, 0.5, 0.5);
-                // We compute the noise level for later.
-                float noise_level = (sphere.radius - hit.norm())/noise_amplitude;
-                // The light is placed on the (10, 10, 10) coords
-                Vec3f light_dir = (Vec3f(10, 10, 10) - hit).normalize();
-                // We determine the light level where the ray hits.
-                float light_intensity  = std::max(0.4f, light_dir*distance_field_normal(hit, sphere));
-                // We apply the computed texture inside the framebuffer.
-                framebuffer[i+j*width] = palette_snow((-.2 + noise_level) * 2) * light_intensity;
+                             hit, 
+                             sphere)) {
+                framebuffer[i+j*width] = Vec3f(1.0, 1.0, 1.0);
+                std::cout << "Hit !" << std::endl;
+                // // We compute the noise level for later.
+                // float noise_level = (sphere.radius - hit.norm())/noise_amplitude;
+                // // The light is placed on the (10, 10, 10) coords
+                // Vec3f light_dir = (Vec3f(10, 10, 10) - hit).normalize();
+                // // We determine the light level where the ray hits.
+                // float light_intensity  = std::max(0.4f, light_dir*distance_field_normal(hit, sphere));
+                // // We apply the computed texture inside the framebuffer.
+                // framebuffer[i+j*width] = palette_snow((-.2 + noise_level) * 2) * light_intensity;
 
 
 //            } else if (cast_ray(Vec3f(CAMERA_X,CAMERA_Y,CAMERA_Z), dir, sphere1)) {
@@ -150,13 +155,13 @@ void render(const unsigned long width, const unsigned long height, float fov) {
 //
             } else {
                 // TODO : Background here.
-                framebuffer[i+j*width] = Vec3f(0., 0., 0.);
+                framebuffer[i+j*width] = Vec3f(0.0, 0.0, 0.0);
             }
         }
     }
 
     std::ofstream ofs; // save the framebuffer to file
-    ofs.open("./out.ppm");
+    ofs.open("./Snowman.ppm");
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (size_t i = 0; i < height*width; ++i) {
         for (size_t j = 0; j<3; j++) {
