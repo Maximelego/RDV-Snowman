@@ -13,100 +13,55 @@ struct Sphere {
     Vec3f center;
     float radius;
 
-    Sphere(const Vec3f &c, const float r) : center(c), radius(r) {}
+    Sphere(const Vec3f &c, const float &r) : center(c), radius(r) {}
+
+    bool ray_intersect(const Vec3f &orig, const Vec3f &dir, float &t0) const {
+        Vec3f L = center - orig;
+        float tca = L*dir;
+        float d2 = L*L - tca*tca;
+        if (d2 > radius*radius) return false;
+        float thc = sqrtf(radius*radius - d2);
+        t0       = tca - thc;
+        float t1 = tca + thc;
+        if (t0 < 0) t0 = t1;
+        if (t0 < 0) return false;
+        return true;
+    }
 };
 
+
 const float noise_amplitude = NOISE_LEVEL  ;  // amount of noise applied to the sphere (towards the center)
+
 
 template <typename T> inline T lerp(const T &v0, const T &v1, float t) {
     return v0 + (v1-v0)*std::max(0.f, std::min(1.f, t));
 }
 
-float hash(const float n) {
-    float x = sin(n)*43758.5453f;
-    return x - floor(x);
-}
-
-float noise(const Vec3f &x) {
-    Vec3f p(floor(x.x), floor(x.y), floor(x.z));
-    Vec3f f(x.x-p.x, x.y-p.y, x.z-p.z);
-    f = f*(f*(Vec3f(3.f, 3.f, 3.f)-f*2.f));
-    float n = p*Vec3f(1.f, 57.f, 113.f);
-    return lerp(lerp(
-                     lerp(hash(n +  0.f), hash(n +  1.f), f.x),
-                     lerp(hash(n + 57.f), hash(n + 58.f), f.x), f.y),
-                lerp(
-                    lerp(hash(n + 113.f), hash(n + 114.f), f.x),
-                    lerp(hash(n + 170.f), hash(n + 171.f), f.x), f.y), f.z);
-}
-
-Vec3f rotate(const Vec3f &v) {
-    return Vec3f(Vec3f(0.00,  0.80,  0.60)*v, Vec3f(-0.80,  0.36, -0.48)*v, Vec3f(-0.60, -0.48,  0.64)*v);
-}
-
-float fractal_brownian_motion(const Vec3f &x) { // this is a bad noise function with lots of artifacts. TODO: find a better one
-    Vec3f p = rotate(x);
-    float f = 0;
-    f += 0.5000*noise(p); p = p*2.32;
-    f += 0.2500*noise(p); p = p*3.03;
-    f += 0.1250*noise(p); p = p*2.61;
-    f += 0.0625*noise(p);
-    return f/0.9375;
-}
 
 Vec3f palette_snow(const float d) { // simple linear gradient yellow-orange-red-darkgray-gray. d is supposed to vary from 0 to 1
-    const Vec3f darkgray    (0.2, 0.2, 0.2);
-    const Vec3f lightgray   (0.7, 0.7, 0.7);
-    const Vec3f gray        (0.4, 0.4, 0.4);
-    const Vec3f white       (1.0, 1.0, 1.0);
+    const Vec3f lightgray(0.7, 0.7, 0.7);
+    const Vec3f lightlightgray(0.8, 0.8, 0.8);
+    const Vec3f lightlightlightgray(0.9, 0.9, 0.9);
+    const Vec3f white(1.0, 1.0, 1.0);
 
     float x = std::max(0.f, std::min(1.f, d));
-    if (x<.25f)
-        return lerp(lightgray, white, x*4.f);
 
-    else if (x<.5f)
-        return lerp(white, lightgray, x*4.f-1.f);
+    if (x < .25f)
+        return lerp(lightgray, white, x * 4.f);
 
-    else if (x<.75f)
-        return lerp(white, lightgray, x*4.f-2.f);
-    return lerp(lightgray, white, x*4.f-3.f);
+    else if (x < .5f)
+        return lerp(lightlightgray, white, x * 4.f - 1.f);
+
+    else if (x < .75f)
+        return lerp(lightlightlightgray, white, x * 4.f - 2.f);
+
+    return lerp(white, white, x * 4.f - 3.f);
 }
 
-// This function defines the implicit surface we render
-float signed_distance_to_sphere(const Vec3f &p, const Sphere &sphere) {
-    Vec3f p_diff = p + sphere.center; 
-    float displacement = -fractal_brownian_motion(p_diff * 3.4) * noise_amplitude;
-    return p_diff.norm() - sphere.radius;
-}
 
-// Simple finite differences, very sensitive to the choice of the eps constant
-Vec3f distance_field_normal(const Vec3f &pos, Sphere sphere) {
-    const float eps = EPS;
-    float d  = signed_distance_to_sphere(pos, sphere);
-    float nx = signed_distance_to_sphere(pos + Vec3f(eps, 0, 0), sphere) - d;
-    float ny = signed_distance_to_sphere(pos + Vec3f(0, eps, 0), sphere) - d;
-    float nz = signed_distance_to_sphere(pos + Vec3f(0, 0, eps), sphere) - d;
-    return Vec3f(nx, ny, nz).normalize();
-}
-
-// This method tells if the ray starting from the origin hits the sphere profided.
-// If so, it saves te coordinates of the impact inside the pos vector.
-bool sphere_trace(const Vec3f &orig, const Vec3f &dir, Vec3f &pos, const Sphere &sphere) {
-    
-    pos = Vec3f(orig);
-    for (size_t i = 0; i < 128; i++) {
-        // We compute de signed distance between our current position and the sphere.
-        float d = signed_distance_to_sphere(pos, sphere);
-
-        if (d <= 0.) return true; // We are inside the sphere.
-        // std::cout << d << std::endl;
-
-        // Adjust the step based on the current position relative to the sphere's center
-        Vec3f step = dir * std::max(d * 0.1f, .01f);
-        pos = pos + step;
-    }
-
-    return false;
+bool cast_ray_on_sphere(const Vec3f &orig, const Vec3f &dir, const Sphere &sphere) {
+    float sphere_dist = std::numeric_limits<float>::max();
+    return sphere.ray_intersect(orig, dir, sphere_dist);
 }
 
 
@@ -116,47 +71,39 @@ void render(const unsigned long width, const unsigned long height, float fov) {
 
     // SHAPES :
     // Base Sphere :
-    Vec3f center = Vec3f(0.0, 0.0, 0.0);
-    Sphere sphere(center, BASE_SPHERE_RADIUS);
+    Sphere base_sphere(Vec3f(0.0, 0.0, 0.0), BASE_SPHERE_RADIUS);
     // Torso Sphere :
-    Sphere sphere1(Vec3f(0.0, 0.5, 0.0), TORSO_SPHERE_RADIUS);
+    Sphere torso_sphere(Vec3f(0.0, 0.8, 0.0), TORSO_SPHERE_RADIUS);
     // Head Sphere :
-    Sphere sphere2(Vec3f(0.0, 1.0, 0.0), HEAD_SPHERE_RADIUS);
-
-    for (size_t j = 0; j<height; j++) {
-        for (size_t i = 0; i<width; i++) {
-            // We define the direction that the ray will follow.
-            float dir_x =  0;// (i + 0.5) -  width/2.0;
-            float dir_y =  0; // -(j + 0.5) +  height/2.0;    // this flips the image at the same time
-            float dir_z =  1; //-height/(2.0*tan(fov/2.0));
-            Vec3f hit;
-
-            if (sphere_trace(Vec3f(CAMERA_X, CAMERA_Y, CAMERA_Z),
-                             Vec3f(dir_x, dir_y, dir_z).normalize(),
-                             hit, 
-                             sphere)) {
-                framebuffer[i+j*width] = Vec3f(1.0, 1.0, 1.0);
-                std::cout << "Hit !" << std::endl;
-                // // We compute the noise level for later.
-                // float noise_level = (sphere.radius - hit.norm())/noise_amplitude;
-                // // The light is placed on the (10, 10, 10) coords
-                // Vec3f light_dir = (Vec3f(10, 10, 10) - hit).normalize();
-                // // We determine the light level where the ray hits.
-                // float light_intensity  = std::max(0.4f, light_dir*distance_field_normal(hit, sphere));
-                // // We apply the computed texture inside the framebuffer.
-                // framebuffer[i+j*width] = palette_snow((-.2 + noise_level) * 2) * light_intensity;
+    Sphere head_sphere(Vec3f(0.0, 1.4, 0.0), HEAD_SPHERE_RADIUS);
 
 
-//            } else if (cast_ray(Vec3f(CAMERA_X,CAMERA_Y,CAMERA_Z), dir, sphere1)) {
-//                framebuffer[i+j*width] = Vec3f(1., 1., 1.);
-//
-//            }  else if (cast_ray(Vec3f(CAMERA_X,CAMERA_Y,CAMERA_Z), dir, sphere2)) {
-//                framebuffer[i+j*width] = Vec3f(1., 1., 1.);
-//
-            } else {
-                // TODO : Background here.
-                framebuffer[i+j*width] = Vec3f(0.0, 0.0, 0.0);
+    // Camera position
+    Vec3f camera = Vec3f(CAMERA_X,CAMERA_Y,CAMERA_Z);
+
+    #pragma omp parallel for
+    for (size_t j = 0; j < height; j++) {
+        for (size_t i = 0; i < width; i++) {
+            float x    =  (2 * (i + 0.5)/(float)width  - 1) * tan(fov/2.) * (float)width/(float)height;
+            float y    = -(2 * (j + 0.5)/(float)height - 1) * tan(fov/2.);
+            Vec3f dir  = Vec3f(x, y, -1).normalize();
+
+            Vec3f color_red   = Vec3f (1.0, 0.0, 0.0);
+            Vec3f color_green = Vec3f (0.0, 1.0, 0.0);
+            Vec3f color_blue  = Vec3f (0.0, 0.0, 1.0);
+            Vec3f bg_color    = Vec3f (0.0, 0.0, 0.0);
+            Vec3f res_color   = bg_color;
+
+            if(cast_ray_on_sphere(camera, dir, base_sphere)) {
+                res_color = color_red;
             }
+            if (cast_ray_on_sphere(camera, dir, torso_sphere)) {
+                res_color = color_green;
+            }
+            if (cast_ray_on_sphere(camera, dir, head_sphere)) {
+                res_color = color_blue;
+            }
+            framebuffer[i+j*width] = res_color;
         }
     }
 
