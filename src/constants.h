@@ -8,7 +8,9 @@
 #define IMAGE_WIDTH    1920
 #define IMAGE_HEIGHT   1080
 
-#define SPHERE_RADIUS  0.5
+#define BASE_SPHERE_RADIUS   0.5
+#define TORSO_SPHERE_RADIUS  0.4
+#define HEAD_SPHERE_RADIUS   0.3
 #define NOISE_LEVEL    0.07
 #define EPS            0.05
 

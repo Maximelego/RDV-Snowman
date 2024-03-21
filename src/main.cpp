@@ -8,7 +8,32 @@
 #include "geometry.h"
 #include "constants.h"
 
-const float sphere_radius   = SPHERE_RADIUS;  // all the noise fits in a sphere with this radius. The center lies in the origin.
+// Definition of a sphere.
+struct Sphere {
+    Vec3f center;
+    float radius;
+
+    Sphere(const Vec3f &c, const float &r) : center(c), radius(r) {}
+
+    bool ray_intersect(const Vec3f &orig, const Vec3f &dir, float &t0) const {
+        Vec3f L = center - orig;
+        float tca = L*dir;
+        float d2 = L*L - tca*tca;
+
+        if (d2 > radius*radius) return false;
+
+        float thc = sqrtf(radius*radius - d2);
+        t0       = tca - thc;
+        float t1 = tca + thc;
+
+        if (t0 < 0) t0 = t1;
+        if (t0 < 0) return false;
+        return true;
+    }
+};
+
+
+const float sphere_radius   = BASE_SPHERE_RADIUS;  // all the noise fits in a sphere with this radius. The center lies in the origin.
 const float noise_amplitude = NOISE_LEVEL  ;  // amount of noise applied to the sphere (towards the center)
 
 template <typename T> inline T lerp(const T &v0, const T &v1, float t) {
@@ -65,10 +90,14 @@ Vec3f palette_snow(const float d) { // simple linear gradient yellow-orange-red-
     return lerp(lightgray, white, x*4.f-3.f);
 }
 
-float signed_distance(const Vec3f &p) { // this function defines the implicit surface we render
+// This function defines the implicit surface we render
+float signed_distance_to_base_sphere(const Vec3f &p) {
     float displacement = - fractal_brownian_motion(p*3.4) * noise_amplitude;
+//    float displacement = 0.;
     return p.norm() - (sphere_radius + displacement);
 }
+
+
 
 bool sphere_trace(const Vec3f &orig, const Vec3f &dir, Vec3f &pos) {
     // Notice the early discard; in fact I know that the noise() function produces non-negative values,
@@ -76,10 +105,9 @@ bool sphere_trace(const Vec3f &orig, const Vec3f &dir, Vec3f &pos) {
     // It is not necessary, just a small speed-up
     if (orig*orig - pow(orig*dir, 2) > pow(sphere_radius, 2)) return false;
 
-
     pos = orig;
     for (size_t i=0; i<128; i++) {
-        float d = signed_distance(pos);
+        float d = signed_distance_to_base_sphere(pos);
         if (d < 0) return true;
         pos = pos + dir*std::max(d*0.1f, .01f); // note that the step depends on the current distance, if we are far from the surface, we can do big steps
     }
@@ -89,10 +117,10 @@ bool sphere_trace(const Vec3f &orig, const Vec3f &dir, Vec3f &pos) {
 Vec3f distance_field_normal(const Vec3f &pos) {
     // Simple finite differences, very sensitive to the choice of the eps constant
     const float eps = EPS;
-    float d = signed_distance(pos);
-    float nx = signed_distance(pos + Vec3f(eps, 0, 0)) - d;
-    float ny = signed_distance(pos + Vec3f(0, eps, 0)) - d;
-    float nz = signed_distance(pos + Vec3f(0, 0, eps)) - d;
+    float d = signed_distance_to_base_sphere(pos);
+    float nx = signed_distance_to_base_sphere(pos + Vec3f(eps, 0, 0)) - d;
+    float ny = signed_distance_to_base_sphere(pos + Vec3f(0, eps, 0)) - d;
+    float nz = signed_distance_to_base_sphere(pos + Vec3f(0, 0, eps)) - d;
     return Vec3f(nx, ny, nz).normalize();
 }
 
@@ -103,6 +131,13 @@ int main() {
     const int   width    = IMAGE_WIDTH ;      // Image width
     const int   height   = IMAGE_HEIGHT;      // Image height
     const float fov      = M_PI/3.;           // Field Of View angle
+
+    // Shapes definitions
+    //    Sphere s1 = Sphere();     // Base
+    //    Sphere s2 = Sphere();     // Torso
+    //    Sphere s3 = Sphere();     // Head
+    // Hat
+    // Buttons
 
     // Framebuffer that is the output of our drawing.
     std::vector<Vec3f> framebuffer(width*height);
@@ -118,9 +153,13 @@ int main() {
             if (sphere_trace(Vec3f(CAMERA_X, CAMERA_Y, CAMERA_Z),
                               Vec3f(dir_x, dir_y, dir_z).normalize(),
                                hit)) { // the camera is placed to (0,0,3) and it looks along the -z axis
-                float noise_level = (sphere_radius-hit.norm())/noise_amplitude;
-                Vec3f light_dir = (Vec3f(10, 10, 10) - hit).normalize();                     // one light is placed to (10,10,10)
+                // We compute the noise level for later.
+                float noise_level = (sphere_radius - hit.norm())/noise_amplitude;
+                // The light is placed on the (10, 10, 10) coords
+                Vec3f light_dir = (Vec3f(10, 10, 10) - hit).normalize();
+                // We determine the light level where the ray hits.
                 float light_intensity  = std::max(0.4f, light_dir*distance_field_normal(hit));
+                // We apply the computed texture inside the framebuffer.
                 framebuffer[i+j*width] = palette_snow((-.2 + noise_level) * 2) * light_intensity;
             } else {
                 // TODO : Add a background
