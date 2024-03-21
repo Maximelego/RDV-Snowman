@@ -9,11 +9,24 @@
 #include "constants.h"
 
 // Definition of a sphere.
+struct Light {
+    Light(const Vec3f &p, const float &i) : position(p), intensity(i) {}
+    Vec3f position;
+    float intensity;
+};
+
+struct Material {
+    Material(const Vec3f &color) : diffuse_color(color) {}
+    Material() : diffuse_color() {}
+    Vec3f diffuse_color;
+};
+
 struct Sphere {
     Vec3f center;
     float radius;
+    Material material;
 
-    Sphere(const Vec3f &c, const float &r) : center(c), radius(r) {}
+    Sphere(const Vec3f &c, const float &r, const Material &m) : center(c), radius(r), material(m) {}
 
     bool ray_intersect(const Vec3f &orig, const Vec3f &dir, float &t0) const {
         Vec3f L = center - orig;
@@ -29,57 +42,64 @@ struct Sphere {
     }
 };
 
-
-const float noise_amplitude = NOISE_LEVEL  ;  // amount of noise applied to the sphere (towards the center)
-
-
-template <typename T> inline T lerp(const T &v0, const T &v1, float t) {
-    return v0 + (v1-v0)*std::max(0.f, std::min(1.f, t));
+bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphere> &spheres, Vec3f &hit, Vec3f &N, Material &material) {
+    float spheres_dist = std::numeric_limits<float>::max();
+    for (size_t i=0; i < spheres.size(); i++) {
+        float dist_i;
+        if (spheres[i].ray_intersect(orig, dir, dist_i) && dist_i < spheres_dist) {
+            spheres_dist = dist_i;
+            hit = orig + dir*dist_i;
+            N = (hit - spheres[i].center).normalize();
+            material = spheres[i].material;
+        }
+    }
+    return spheres_dist<1000;
 }
 
+Vec3f cast_ray(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphere> &spheres, const std::vector<Light> &lights) {
+    Vec3f point, N;
+    Material material;
 
-Vec3f palette_snow(const float d) { // simple linear gradient yellow-orange-red-darkgray-gray. d is supposed to vary from 0 to 1
-    const Vec3f lightgray(0.7, 0.7, 0.7);
-    const Vec3f lightlightgray(0.8, 0.8, 0.8);
-    const Vec3f lightlightlightgray(0.9, 0.9, 0.9);
-    const Vec3f white(1.0, 1.0, 1.0);
+    if (!scene_intersect(orig, dir, spheres, point, N, material)) {
+        return Vec3f(0.2, 0.7, 0.8); // background color
+    }
 
-    float x = std::max(0.f, std::min(1.f, d));
-
-    if (x < .25f)
-        return lerp(lightgray, white, x * 4.f);
-
-    else if (x < .5f)
-        return lerp(lightlightgray, white, x * 4.f - 1.f);
-
-    else if (x < .75f)
-        return lerp(lightlightlightgray, white, x * 4.f - 2.f);
-
-    return lerp(white, white, x * 4.f - 3.f);
+    float diffuse_light_intensity = 0;
+    for (size_t i=0; i<lights.size(); i++) {
+        Vec3f light_dir      = (lights[i].position - point).normalize();
+        diffuse_light_intensity  += lights[i].intensity * std::max(0.f, light_dir*N);
+    }
+    return material.diffuse_color * diffuse_light_intensity;
 }
-
-
-bool cast_ray_on_sphere(const Vec3f &orig, const Vec3f &dir, const Sphere &sphere) {
-    float sphere_dist = std::numeric_limits<float>::max();
-    return sphere.ray_intersect(orig, dir, sphere_dist);
-}
-
 
 void render(const unsigned long width, const unsigned long height, float fov) {
     // Output buffer.
     std::vector<Vec3f> framebuffer(width*height);
 
-    // SHAPES :
-    // Base Sphere :
-    Sphere base_sphere(Vec3f(0.0, 0.0, 0.0), BASE_SPHERE_RADIUS);
-    // Torso Sphere :
-    Sphere torso_sphere(Vec3f(0.0, 0.8, 0.0), TORSO_SPHERE_RADIUS);
-    // Head Sphere :
-    Sphere head_sphere(Vec3f(0.0, 1.4, 0.0), HEAD_SPHERE_RADIUS);
+    // Colors :
+    Vec3f color_red    = Vec3f (1.0, 0.0, 0.0);
+    Vec3f color_green  = Vec3f (0.0, 1.0, 0.0);
+    Vec3f color_blue   = Vec3f (0.0, 0.0, 1.0);
+    Vec3f color_white  = Vec3f (1.0, 1.0, 1.0);
 
+    // SHAPES :
+    // Spheres :
+    Sphere base_sphere  (Vec3f(0.0, 0.0, 0.0), BASE_SPHERE_RADIUS,  Material(color_white));
+    Sphere torso_sphere (Vec3f(0.0, 1.1, 0.0), TORSO_SPHERE_RADIUS, Material(color_white));
+    Sphere head_sphere  (Vec3f(0.0, 2.2, 0.0), HEAD_SPHERE_RADIUS,  Material(color_white));
+
+    std::vector<Sphere> spheres;
+    spheres.push_back(base_sphere);
+    spheres.push_back(torso_sphere);
+    spheres.push_back(head_sphere);
+
+    // LIGHTNING
+    std::vector<Light> lights;
+    lights.push_back(Light(Vec3f(-5, 5,  5), 1.1));
 
     // Camera position
     Vec3f camera = Vec3f(CAMERA_X,CAMERA_Y,CAMERA_Z);
+
 
     #pragma omp parallel for
     for (size_t j = 0; j < height; j++) {
@@ -88,22 +108,7 @@ void render(const unsigned long width, const unsigned long height, float fov) {
             float y    = -(2 * (j + 0.5)/(float)height - 1) * tan(fov/2.);
             Vec3f dir  = Vec3f(x, y, -1).normalize();
 
-            Vec3f color_red   = Vec3f (1.0, 0.0, 0.0);
-            Vec3f color_green = Vec3f (0.0, 1.0, 0.0);
-            Vec3f color_blue  = Vec3f (0.0, 0.0, 1.0);
-            Vec3f bg_color    = Vec3f (0.0, 0.0, 0.0);
-            Vec3f res_color   = bg_color;
-
-            if(cast_ray_on_sphere(camera, dir, base_sphere)) {
-                res_color = color_red;
-            }
-            if (cast_ray_on_sphere(camera, dir, torso_sphere)) {
-                res_color = color_green;
-            }
-            if (cast_ray_on_sphere(camera, dir, head_sphere)) {
-                res_color = color_blue;
-            }
-            framebuffer[i+j*width] = res_color;
+            framebuffer[i+j*width] = cast_ray(camera, dir, spheres, lights);
         }
     }
 

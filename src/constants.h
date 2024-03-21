@@ -15,9 +15,9 @@
 
 #define NOISE_LEVEL          0.02       // 0.07
 
-#define CAMERA_X       (-1)
-#define CAMERA_Y       1
-#define CAMERA_Z       4
+#define CAMERA_X       (-2)
+#define CAMERA_Y       2
+#define CAMERA_Z       6
 
 
 #endif //SNOWMAN_CONSTANTS_H
