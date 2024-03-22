@@ -261,8 +261,9 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     float threshold = MASK_THRESHOLD;
     // Some useful vectors.
     Vec3f up_direction        = Vec3f(0.0,  0.0, 0.0).normalize();
-    Vec3f right_direction     = Vec3f(1.0,  0.0, 0.0).normalize();
-    Vec3f left_direction      = Vec3f(-1.0, 0.0, 0.0).normalize();
+    Vec3f front_direction     = Vec3f(-1.0,  0.0, -1.0).normalize();
+    Vec3f right_direction     = Vec3f(1.0,  1.0, 1.0).normalize();
+    Vec3f left_direction      = Vec3f(-1.0, 1.0, -1.0).normalize();
 
     // Vectors to store the shapes:
     std::vector<Sphere>     spheres;
@@ -292,6 +293,7 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     // Materials : (basically , the texture used, might be useful to add some noise...)
     Material carrot_material  = Material(color_orange);
     Material hat_material     = Material(color_black);
+    Material button_material  = Material(color_black);
     Material arm_material     = Material(color_brown);
     Material snow_material    = Material(color_white);
 
@@ -327,6 +329,20 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     cylinders.push_back(right_arm_cylinder);
     cylinders.push_back(left_arm_cylinder);
 
+    // Buttons
+    Cylinder button_1    (Vec3f(0.0, 0.7 , 0.0), front_direction, 0.1, 0.1 , button_material);
+    Cylinder button_2    (Vec3f(0.0, 1.05, 0.0), front_direction, 0.1, 0.1 , button_material);
+    Cylinder button_3    (Vec3f(0.0, 1.40, 0.0), front_direction, 0.1, 0.1 , button_material);
+
+    cylinders.push_back(button_1);
+    cylinders.push_back(button_2);
+    cylinders.push_back(button_3);
+
+    // Eyes
+    Cylinder left_eye    (Vec3f(-0.2, 2.3, 0.0), front_direction, 0.1, 0.1 , button_material);
+    Cylinder right_eye   (Vec3f( 0.2, 2.3, 0.0), front_direction, 0.1, 0.1 , button_material);
+    cylinders.push_back(left_eye);
+    cylinders.push_back(right_eye);
 
 
     #pragma omp parallel for
