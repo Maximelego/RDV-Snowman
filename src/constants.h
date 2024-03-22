@@ -14,9 +14,11 @@
 
 #define AMBIANT_LIGHT_LEVEL  0.5
 
-#define CAMERA_X       (2)
-#define CAMERA_Y       2
-#define CAMERA_Z       6
+
+// Perfect position for the camera : (5,3,8.5)
+#define CAMERA_X       5
+#define CAMERA_Y       3
+#define CAMERA_Z       8.5
 
 
 #endif //SNOWMAN_CONSTANTS_H
