@@ -8,6 +8,57 @@
 #include "geometry.h"
 #include "constants.h"
 
+
+void readPPM(const std::string& filename, std::vector<Vec3f>& framebuffer, int width, int height) {
+    std::ifstream file(filename, std::ios::binary);
+    if (!file) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return;
+    }
+
+    std::string header;
+    std::getline(file, header); // Read the header
+    if (header != "P6") {
+        std::cerr << "Invalid PPM file format!" << std::endl;
+        return;
+    }
+
+    // Skip comment lines
+    while (file.peek() == '#') {
+        std::string comment;
+        std::getline(file, comment);
+    }
+
+    int fileWidth, fileHeight, maxColor;
+    file >> fileWidth >> fileHeight >> maxColor;
+
+    if (fileWidth != width || fileHeight != height) {
+        std::cerr << "Image dimensions do not match!" << std::endl;
+        return;
+    }
+
+    file.ignore(); // Ignore the newline character
+
+    char pixel[3];
+    for (int i = 0; i < height; ++i) {
+        for (int j = 0; j < width; ++j) {
+            // Apply the background texture on the masked pixels.
+            if (framebuffer[i * width + j].x > 0.19 && framebuffer[i * width + j].x < 0.21
+            && framebuffer[i * width + j].y > 0.69 && framebuffer[i * width + j].y < 0.71
+            && framebuffer[i * width + j].z > 0.79 && framebuffer[i * width + j].z < 0.81) {
+
+                file.read(pixel, 3); // Read RGB values
+                framebuffer[i * width + j].x = static_cast<float>(static_cast<unsigned char>(pixel[0])) / 255.0f;
+                framebuffer[i * width + j].y = static_cast<float>(static_cast<unsigned char>(pixel[1])) / 255.0f;
+                framebuffer[i * width + j].z = static_cast<float>(static_cast<unsigned char>(pixel[2])) / 255.0f;
+            }
+        }
+    }
+
+    file.close();
+}
+
+
 // Definition of a sphere.
 struct Light {
     Light(const Vec3f &p, const float &i) : position(p), intensity(i) {}
@@ -64,9 +115,9 @@ Vec3f cast_ray(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphere> &s
         return Vec3f(0.2, 0.7, 0.8); // background color
     }
 
-    float diffuse_light_intensity = 0;
+    float diffuse_light_intensity = AMBIANT_LIGHT_LEVEL;
     for (size_t i=0; i<lights.size(); i++) {
-        Vec3f light_dir      = (lights[i].position - point).normalize();
+        Vec3f light_dir           = (lights[i].position - point).normalize();
         diffuse_light_intensity  += lights[i].intensity * std::max(0.f, light_dir*N);
     }
     return material.diffuse_color * diffuse_light_intensity;
@@ -83,7 +134,7 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     Vec3f color_white  = Vec3f (1.0, 1.0, 1.0);
 
     // SHAPES :
-    // Spheres :
+    // Snowman Spheres :
     Sphere base_sphere  (Vec3f(0.0, 0.0, 0.0), BASE_SPHERE_RADIUS,  Material(color_white));
     Sphere torso_sphere (Vec3f(0.0, 1.1, 0.0), TORSO_SPHERE_RADIUS, Material(color_white));
     Sphere head_sphere  (Vec3f(0.0, 2.2, 0.0), HEAD_SPHERE_RADIUS,  Material(color_white));
@@ -100,7 +151,6 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     // Camera position
     Vec3f camera = Vec3f(CAMERA_X,CAMERA_Y,CAMERA_Z);
 
-
     #pragma omp parallel for
     for (size_t j = 0; j < height; j++) {
         for (size_t i = 0; i < width; i++) {
@@ -111,6 +161,9 @@ void render(const unsigned long width, const unsigned long height, float fov) {
             framebuffer[i+j*width] = cast_ray(camera, dir, spheres, lights);
         }
     }
+
+    // Placing background in framebuffer.
+    readPPM("snowy_house.ppm", framebuffer, width, height);
 
     std::ofstream ofs; // save the framebuffer to file
     ofs.open("./Snowman.ppm");
@@ -128,9 +181,7 @@ void render(const unsigned long width, const unsigned long height, float fov) {
 int main() {
 
     std::cout << "[INFO] - Building Snowman..." << std::endl;
-
     render(IMAGE_WIDTH, IMAGE_HEIGHT, M_PI/3.);
-
     std::cout << "[INFO] - Snowman done ! It was outputted in a Snowman.ppm file." << std::endl;
 
     return 0;

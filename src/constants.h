@@ -12,10 +12,9 @@
 #define TORSO_SPHERE_RADIUS  0.8
 #define HEAD_SPHERE_RADIUS   0.6
 
+#define AMBIANT_LIGHT_LEVEL  0.5
 
-#define NOISE_LEVEL          0.02       // 0.07
-
-#define CAMERA_X       (-2)
+#define CAMERA_X       (2)
 #define CAMERA_Y       2
 #define CAMERA_Z       6
 
