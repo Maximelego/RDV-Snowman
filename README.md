@@ -1,7 +1,6 @@
 # RDV-Snowman
 A beautiful snowman coded in C++ using 3D rendering methods.
 
-
 ## Installation
 This project uses CMake and Makefile to build the necessary configuration files.
 
@@ -23,7 +22,7 @@ chmod +x ./build.sh
 
 ## Expected result
 
-A snowman should appear in an glfw3 window. It should look like so :
+A snowman should appear in a Snowman.ppm file. It should look like so :
 
 ![Result expected](./Snowman.jpg)
 

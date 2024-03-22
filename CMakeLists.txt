@@ -23,6 +23,5 @@ enable_cxx_compiler_flag_if_supported("-fopenmp")
 
 file(GLOB SOURCES src/*.h src/*.cpp)
 
-add_executable(${PROJECT_NAME} ${SOURCES}
-        src/constants.h)
+add_executable(${PROJECT_NAME} ${SOURCES})
 
