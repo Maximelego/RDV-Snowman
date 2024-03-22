@@ -1,5 +1,4 @@
 # Ignoring build folder.
 build 
 cmake-build-snowman
-Snowman.ppm
 .idea

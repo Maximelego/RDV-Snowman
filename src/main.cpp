@@ -98,43 +98,38 @@ struct Cylinder {
             : center(c), axis(a), radius(r), height(h), material(m) {}
 
     bool ray_intersect(const Vec3f &orig, const Vec3f &dir, float &t0) const {
-        Vec3f L = center - orig;
-        float t1;
-        float tca = L.x*dir.x + L.y*dir.y + L.z*dir.z;
-        float d2 = L.x*L.x + L.y*L.y + L.z*L.z - tca*tca;
-        if (d2 > radius*radius) return false;
+        Vec3f L = orig - center;
+        float a = dir.x * dir.x + dir.z * dir.z;
+        float b = 2 * (L.x * dir.x + L.z * dir.z);
+        float c = L.x * L.x + L.z * L.z - radius * radius;
 
-        float thc = sqrtf(radius*radius - d2);
-        t0 = tca - thc;
-        t1 = tca + thc;
+        float discriminant = b * b - 4 * a * c;
+        if (discriminant < 0) return false;
 
-        // Check if the intersection points are within the height of the cylinder
-        float y0 = orig.y + t0 * dir.y;
-        float y1 = orig.y + t1 * dir.y;
-        float ymin = center.y - height / 2;
-        float ymax = center.y + height / 2;
+        float t1 = (-b + sqrt(discriminant)) / (2 * a);
+        float t2 = (-b - sqrt(discriminant)) / (2 * a);
 
-        // Ensure t0 is the intersection outside the caps
-        if (t0 > t1) std::swap(t0, t1);
+        if (t1 > t2) std::swap(t1, t2);
 
-        // Check if the intersection points are within the height of the cylinder
-        if (y0 < ymin && y1 < ymin) return false;
-        if (y0 > ymax && y1 > ymax) return false;
+        float y0 = orig.y + t1 * dir.y;
+        if (y0 >= center.y - height / 2 && y0 <= center.y + height / 2) {
+            t0 = t1;
+            return true;
+        }
 
-        // Clip the intersection points to the height of the cylinder
-        if (y0 < ymin) t0 = (ymin - orig.y) / dir.y;
-        if (y1 < ymin) t1 = (ymin - orig.y) / dir.y;
-        if (y0 > ymax) t0 = (ymax - orig.y) / dir.y;
-        if (y1 > ymax) t1 = (ymax - orig.y) / dir.y;
+        float y1 = orig.y + t2 * dir.y;
+        if (y1 >= center.y - height / 2 && y1 <= center.y + height / 2) {
+            t0 = t2;
+            return true;
+        }
 
-        return true;
+        return false;
     }
 };
 
 struct Cone {
 
     float cosa;	    // half cone angle
-    float h;	    // height
     Vec3f c;		// tip position
     Vec3f v;		// axis
     Material m;	    // material
@@ -143,30 +138,31 @@ struct Cone {
     Cone(const Vec3f &tip, const Vec3f &axis, float a, const Material &m) : cosa(a), c(tip), v(axis), m(m) {}
 
     bool ray_intersect(const Vec3f &orig, const Vec3f &dir, float &t0) const {
-//        Vec3f co = orig - c;
-//
-//        float a = dir.dot(v) * dir.dot(v) - cosa * cosa;
-//        float b = 2.0f * (dir.dot(v) * co.dot(v) - co.dot(v) * cosa * cosa);
-//        float c = co.dot(v) * co.dot(v) - co.dot(co) * cosa * cosa;
-//
-//        float det = b * b - 4.0f * a * c;
-//        if (det < 0.0f) return false;
-//
-//        det = sqrt(det);
-//        float t1 = (-b - det) / (2.0f * a);
-//        float t2 = (-b + det) / (2.0f * a);
-//
-//        float t = (t1 < 0.0f || t2 < t1) ? t2 : t1;
-//        if (t < 0.0f) return false;
-//
-//        Vec3f cp = orig + (dir * t) - c;
-//        float h = cp.dot(v);
-//        if (h < 0.0f || h > this->h) return false;
-//
-//        Vec3f n = normalize(cp - v * h / this->h);
-//
-//        t0 = t;
-//        return true;
+        Vec3f L = orig - c;
+        float cos2_a = cos(cosa) * cos(cosa);
+        float a = dir.x * dir.x + dir.z * dir.z - cos2_a * dir.y * dir.y;
+        float b = 2 * (L.x * dir.x + L.z * dir.z - cos2_a * L.y * dir.y);
+        float c_val = L.x * L.x + L.z * L.z - cos2_a * L.y * L.y;
+
+        float discriminant = b * b - 4 * a * c_val;
+        if (discriminant < 0) return false;
+
+        float t1 = (-b + sqrt(discriminant)) / (2 * a);
+        float t2 = (-b - sqrt(discriminant)) / (2 * a);
+
+        if (t1 > t2) std::swap(t1, t2);
+
+        float hit_y = orig.y + t1 * dir.y;
+        if (t1 > 0 && hit_y >= c.y && hit_y <= c.y + v.y) {
+            t0 = t1;
+            return true;
+        }
+
+        hit_y = orig.y + t2 * dir.y;
+        if (t2 > 0 && hit_y >= c.y && hit_y <= c.y + v.y) {
+            t0 = t2;
+            return true;
+        }
 
         return false;
     }
@@ -187,21 +183,21 @@ bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphe
 }
 
 bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Cone> &cones, Vec3f &hit, Vec3f &N, Material &material) {
-    float min_cones_dist = std::numeric_limits<float>::max();
+    float min_cone_dist = std::numeric_limits<float>::max();
     bool hit_cone = false;
+
     for (const Cone &cone : cones) {
         float dist;
-        if (cone.ray_intersect(orig, dir, dist) && dist < min_cones_dist) {
-            min_cones_dist = dist;
+        if (cone.ray_intersect(orig, dir, dist) && dist < min_cone_dist) {
+            std::cout << "Cone hit !" << std::endl;
+            min_cone_dist = dist;
             hit = orig + dir * dist;
-            Vec3f pointOnCone = hit - cone.c;
-            float height = pointOnCone * cone.v;
-            Vec3f surfaceNormal = cone.v * height - pointOnCone;
-            N = surfaceNormal.normalize();
+            N = (hit - cone.c).normalize(); // normal points from the hit point towards the center of the cone
             material = cone.m;
             hit_cone = true;
         }
     }
+
     return hit_cone;
 }
 
@@ -240,8 +236,8 @@ Vec3f cast_ray(const Vec3f &orig, const Vec3f &dir,
     float diffuse_light_intensity = AMBIANT_LIGHT_LEVEL;
 
     if (scene_intersect(orig, dir, cylinders, point, N, material)
-        || scene_intersect(orig, dir, cones, point, N, material)
         || scene_intersect(orig, dir, spheres, point, N, material)
+        || scene_intersect(orig, dir, cones, point, N, material)
         ) {
         for (size_t i = 0; i < lights.size(); i++) {
             Vec3f light_dir = (lights[i].position - point).normalize();
@@ -261,9 +257,9 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     float threshold = MASK_THRESHOLD;
     // Some useful vectors.
     Vec3f up_direction        = Vec3f(0.0,  0.0, 0.0).normalize();
-    Vec3f front_direction     = Vec3f(-1.0,  0.0, -1.0).normalize();
-    Vec3f right_direction     = Vec3f(1.0,  1.0, 1.0).normalize();
-    Vec3f left_direction      = Vec3f(-1.0, 1.0, -1.0).normalize();
+    Vec3f front_direction     = Vec3f(1.0,  0.0, 1.0).normalize();
+    Vec3f right_direction     = Vec3f(1.0,  0.0, 0.0).normalize();
+    Vec3f left_direction      = Vec3f(-1.0, 0.0, 0.0).normalize();
 
     // Vectors to store the shapes:
     std::vector<Sphere>     spheres;
@@ -298,7 +294,6 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     Material snow_material    = Material(color_white);
 
 
-
     // Placing background in framebuffer.
     readPPM("snowy_house.ppm", framebuffer, width, height);
 
@@ -314,15 +309,15 @@ void render(const unsigned long width, const unsigned long height, float fov) {
 
 
     // Cone representing the carrot
-    Cone carrot(Vec3f(0.0, 2.5, 0.0), Vec3f(0.0, -1.0, 0.0), M_PI / 4, carrot_material);
+    Cone carrot(Vec3f(0.0, 2.5, 0.0), Vec3f(0.0, -.5, 0.0), M_PI / 4, carrot_material);
     cones.push_back(carrot);
 
     // Hat
     Cylinder hat_top_cylinder    (Vec3f(0.0, 2.9, 0.0), up_direction, 0.4, 0.5 , hat_material);
     Cylinder hat_bottom_cylinder (Vec3f(0.0, 2.7, 0.0), up_direction, 0.6, 0.05, hat_material);
     // Arms
-    Cylinder right_arm_cylinder    (Vec3f( 1.0, 1.0, -0.1), right_direction, 0.1, 3.0 , arm_material);
-    Cylinder left_arm_cylinder     (Vec3f(-1.0, 1.0, 0.1), left_direction,  0.1, 3.0 , arm_material);
+    Cylinder right_arm_cylinder  (Vec3f( 1.0, 1.0, -0.1),right_direction, 0.1, 3.0 , arm_material);
+    Cylinder left_arm_cylinder   (Vec3f(-1.0, 1.0, 0.1), left_direction,  0.1, 3.0 , arm_material);
 
     cylinders.push_back(hat_top_cylinder);
     cylinders.push_back(hat_bottom_cylinder);
