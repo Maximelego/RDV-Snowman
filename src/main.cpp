@@ -5,9 +5,9 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <random>
 #include "geometry.h"
 #include "constants.h"
-
 
 void readPPM(const std::string& filename, std::vector<Vec3f>& framebuffer, unsigned long width, unsigned long height) {
     std::ifstream file(filename, std::ios::binary);
@@ -79,10 +79,27 @@ struct Sphere {
         float d2 = L*L - tca*tca;
         if (d2 > radius*radius) return false;
         float thc = sqrtf(radius*radius - d2);
-        t0       = tca - thc;
+        t0 = tca - thc;
         float t1 = tca + thc;
         if (t0 < 0) t0 = t1;
         if (t0 < 0) return false;
+
+        float noise_scale = 0.75;
+        float noise_strength = 0.06;
+
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<float> dis(-1.0, 1.0);
+
+        Vec3f noise(dis(gen), dis(gen), dis(gen));
+        noise.normalize();
+        noise = noise * noise_strength * noise_scale;
+
+        Vec3f intersection_point = orig + dir * t0;
+        intersection_point = intersection_point + noise;
+
+        t0 = (intersection_point - orig).norm();
+
         return true;
     }
 };
@@ -192,7 +209,13 @@ bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Cone
             std::cout << "Cone hit !" << std::endl;
             min_cone_dist = dist;
             hit = orig + dir * dist;
-            N = (hit - cone.c).normalize(); // normal points from the hit point towards the center of the cone
+
+            // Compute normal vector for cone
+            Vec3f L = hit - cone.c;
+            float t = cone.v * L;
+            Vec3f projection = cone.c + cone.v * t;
+            N = (hit - projection).normalize();
+
             material = cone.m;
             hit_cone = true;
         }
@@ -258,8 +281,8 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     // Some useful vectors.
     Vec3f up_direction        = Vec3f(0.0,  0.0, 0.0).normalize();
     Vec3f front_direction     = Vec3f(1.0,  0.0, 1.0).normalize();
-    Vec3f right_direction     = Vec3f(1.0,  0.0, 0.0).normalize();
-    Vec3f left_direction      = Vec3f(-1.0, 0.0, 0.0).normalize();
+    //Vec3f right_direction     = Vec3f(1.0,  0.0, 0.0).normalize();
+    //Vec3f left_direction      = Vec3f(-1.0, 0.0, 0.0).normalize();
 
     // Vectors to store the shapes:
     std::vector<Sphere>     spheres;
@@ -275,12 +298,12 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     Vec3f camera = Vec3f(CAMERA_X,CAMERA_Y,CAMERA_Z);
 
     // Colors :
-    Vec3f color_red    = Vec3f (1.0, 0.0, 0.0);
-    Vec3f color_green  = Vec3f (0.0, 1.0, 0.0);
-    Vec3f color_blue   = Vec3f (0.0, 0.0, 1.0);
+    //Vec3f color_red    = Vec3f (1.0, 0.0, 0.0);
+    //Vec3f color_green  = Vec3f (0.0, 1.0, 0.0);
+    //Vec3f color_blue   = Vec3f (0.0, 0.0, 1.0);
 
     Vec3f color_orange = Vec3f (1.0, 0.3, 0.0);
-    Vec3f color_brown  = Vec3f (210/255.f,105/255.f,30/255.f);
+    //Vec3f color_brown  = Vec3f (210/255.f,105/255.f,30/255.f);
 
     Vec3f color_white  = Vec3f (1.0, 1.0, 1.0);
     Vec3f color_black  = Vec3f (0.15, 0.15, 0.15);
@@ -290,7 +313,7 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     Material carrot_material  = Material(color_orange);
     Material hat_material     = Material(color_black);
     Material button_material  = Material(color_black);
-    Material arm_material     = Material(color_brown);
+    //Material arm_material     = Material(color_brown);
     Material snow_material    = Material(color_white);
 
 
@@ -308,21 +331,22 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     spheres.push_back(head_sphere);
 
 
-    // Cone representing the carrot
-    Cone carrot(Vec3f(0.0, 2.5, 0.0), Vec3f(0.0, -.5, 0.0), M_PI / 4, carrot_material);
-    cones.push_back(carrot);
+    // Cylinder representing the carrot
+    Cylinder carrot_cylinder(Vec3f(0.0, 2.1, 0.0), front_direction, 0.03, 0.25, carrot_material);
+    cylinders.push_back(carrot_cylinder);
+
 
     // Hat
     Cylinder hat_top_cylinder    (Vec3f(0.0, 2.9, 0.0), up_direction, 0.4, 0.5 , hat_material);
     Cylinder hat_bottom_cylinder (Vec3f(0.0, 2.7, 0.0), up_direction, 0.6, 0.05, hat_material);
     // Arms
-    Cylinder right_arm_cylinder  (Vec3f( 1.0, 1.0, -0.1),right_direction, 0.1, 3.0 , arm_material);
-    Cylinder left_arm_cylinder   (Vec3f(-1.0, 1.0, 0.1), left_direction,  0.1, 3.0 , arm_material);
+    //Cylinder right_arm_cylinder  (Vec3f( 1.0, 1.0, -0.1),right_direction, 0.1, 3.0 , arm_material);
+    //Cylinder left_arm_cylinder   (Vec3f(-1.0, 1.0, 0.1), left_direction,  0.1, 3.0 , arm_material);
 
     cylinders.push_back(hat_top_cylinder);
     cylinders.push_back(hat_bottom_cylinder);
-    cylinders.push_back(right_arm_cylinder);
-    cylinders.push_back(left_arm_cylinder);
+    //cylinders.push_back(right_arm_cylinder);
+    //cylinders.push_back(left_arm_cylinder);
 
     // Buttons
     Cylinder button_1    (Vec3f(0.0, 0.7 , 0.0), front_direction, 0.1, 0.1 , button_material);
@@ -383,4 +407,3 @@ int main() {
 
     return 0;
 }
-
