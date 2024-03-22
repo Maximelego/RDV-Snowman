@@ -79,7 +79,7 @@ struct Sphere {
         float d2 = L*L - tca*tca;
         if (d2 > radius*radius) return false;
         float thc = sqrtf(radius*radius - d2);
-        t0 = tca - thc;
+        t0       = tca - thc;
         float t1 = tca + thc;
         if (t0 < 0) t0 = t1;
         if (t0 < 0) return false;
@@ -106,7 +106,7 @@ struct Sphere {
 
 struct Cylinder {
     Vec3f center;     // Center of the cylinder
-    Vec3f axis;       // Direction of the cylinder's axis
+    Vec3f axis;       // Direction of the cylinder's axis, normalized
     float radius;     // Radius of the cylinder
     float height;     // Height of the cylinder
     Material material;
@@ -116,72 +116,74 @@ struct Cylinder {
 
     bool ray_intersect(const Vec3f &orig, const Vec3f &dir, float &t0) const {
         Vec3f L = orig - center;
-        float a = dir.x * dir.x + dir.z * dir.z;
-        float b = 2 * (L.x * dir.x + L.z * dir.z);
-        float c = L.x * L.x + L.z * L.z - radius * radius;
+        Vec3f d_proj = dir - axis * (dir * axis); // Project dir onto plane perpendicular to the cylinder's axis
+        Vec3f L_proj = L - axis * (L * axis); // Same projection for L
+
+        float a = d_proj * d_proj;
+        float b = 2 * (d_proj * L_proj);
+        float c = L_proj * L_proj - radius * radius;
 
         float discriminant = b * b - 4 * a * c;
         if (discriminant < 0) return false;
 
-        float t1 = (-b + sqrt(discriminant)) / (2 * a);
-        float t2 = (-b - sqrt(discriminant)) / (2 * a);
+        float sqrtD = sqrt(discriminant);
+        float t1 = (-b - sqrtD) / (2 * a);
+        float t2 = (-b + sqrtD) / (2 * a);
 
         if (t1 > t2) std::swap(t1, t2);
 
-        float y0 = orig.y + t1 * dir.y;
-        if (y0 >= center.y - height / 2 && y0 <= center.y + height / 2) {
-            t0 = t1;
-            return true;
+        float dist = std::min(t1, t2);
+        Vec3f P = orig + dir * dist; // Calculate the point of intersection
+        float len = (P - center) * axis; // Length along the cylinder axis
+
+        if (len < 0 || len > height) {
+            return false; // The intersection is outside the cylinder's bounds
         }
 
-        float y1 = orig.y + t2 * dir.y;
-        if (y1 >= center.y - height / 2 && y1 <= center.y + height / 2) {
-            t0 = t2;
-            return true;
-        }
-
-        return false;
+        t0 = dist;
+        return true;
     }
 };
 
 struct Cone {
+    Vec3f tip;      // Tip position
+    Vec3f axis;     // Axis direction, normalized
+    float angle;    // Opening angle in radians
+    float height;   // Height of the cone
+    Material material;
 
-    float cosa;	    // half cone angle
-    Vec3f c;		// tip position
-    Vec3f v;		// axis
-    Material m;	    // material
-
-
-    Cone(const Vec3f &tip, const Vec3f &axis, float a, const Material &m) : cosa(a), c(tip), v(axis), m(m) {}
+    Cone(const Vec3f &tip, const Vec3f &axis, float angle, float height, const Material &m)
+            : tip(tip), axis(axis), angle(angle), height(height), material(m) {}
 
     bool ray_intersect(const Vec3f &orig, const Vec3f &dir, float &t0) const {
-        Vec3f L = orig - c;
-        float cos2_a = cos(cosa) * cos(cosa);
-        float a = dir.x * dir.x + dir.z * dir.z - cos2_a * dir.y * dir.y;
-        float b = 2 * (L.x * dir.x + L.z * dir.z - cos2_a * L.y * dir.y);
-        float c_val = L.x * L.x + L.z * L.z - cos2_a * L.y * L.y;
+        // This simplified example assumes the cone's axis is aligned with a major axis for clarity
+        Vec3f deltaP = orig - tip;
+        float cos2 = cos(angle) * cos(angle);
 
-        float discriminant = b * b - 4 * a * c_val;
+        // Variables for the quadratic equation
+        float A = dir * dir - cos2 * (dir * axis) * (dir * axis);
+        float B = 2 * (dir * deltaP - cos2 * (dir * axis) * (deltaP * axis));
+        float C = deltaP * deltaP - cos2 * (deltaP * axis) * (deltaP * axis);
+
+        float discriminant = B * B - 4 * A * C;
         if (discriminant < 0) return false;
 
-        float t1 = (-b + sqrt(discriminant)) / (2 * a);
-        float t2 = (-b - sqrt(discriminant)) / (2 * a);
+        float sqrtD = sqrt(discriminant);
+        float t1 = (-B - sqrtD) / (2 * A);
+        float t2 = (-B + sqrtD) / (2 * A);
 
         if (t1 > t2) std::swap(t1, t2);
 
-        float hit_y = orig.y + t1 * dir.y;
-        if (t1 > 0 && hit_y >= c.y && hit_y <= c.y + v.y) {
-            t0 = t1;
-            return true;
+        float dist = std::min(t1, t2);
+        Vec3f P = orig + dir * dist; // Calculate the point of intersection
+        float len = (P - tip) * axis; // Length along the cone's axis
+
+        if (len < 0 || len > height) {
+            return false; // The intersection is outside the cone's bounds
         }
 
-        hit_y = orig.y + t2 * dir.y;
-        if (t2 > 0 && hit_y >= c.y && hit_y <= c.y + v.y) {
-            t0 = t2;
-            return true;
-        }
-
-        return false;
+        t0 = dist;
+        return true;
     }
 };
 
@@ -206,17 +208,10 @@ bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Cone
     for (const Cone &cone : cones) {
         float dist;
         if (cone.ray_intersect(orig, dir, dist) && dist < min_cone_dist) {
-            std::cout << "Cone hit !" << std::endl;
             min_cone_dist = dist;
             hit = orig + dir * dist;
-
-            // Compute normal vector for cone
-            Vec3f L = hit - cone.c;
-            float t = cone.v * L;
-            Vec3f projection = cone.c + cone.v * t;
-            N = (hit - projection).normalize();
-
-            material = cone.m;
+            N = (hit - cone.tip).normalize(); // normal points from the hit point towards the center of the cone
+            material = cone.material;
             hit_cone = true;
         }
     }
@@ -258,9 +253,10 @@ Vec3f cast_ray(const Vec3f &orig, const Vec3f &dir,
     Material material;
     float diffuse_light_intensity = AMBIANT_LIGHT_LEVEL;
 
-    if (scene_intersect(orig, dir, cylinders, point, N, material)
-        || scene_intersect(orig, dir, spheres, point, N, material)
+    if (
+        scene_intersect(orig, dir, cylinders, point, N, material)
         || scene_intersect(orig, dir, cones, point, N, material)
+        || scene_intersect(orig, dir, spheres, point, N, material)
         ) {
         for (size_t i = 0; i < lights.size(); i++) {
             Vec3f light_dir = (lights[i].position - point).normalize();
@@ -279,10 +275,10 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     // Threshold for the background mask :
     float threshold = MASK_THRESHOLD;
     // Some useful vectors.
-    Vec3f up_direction        = Vec3f(0.0,  0.0, 0.0).normalize();
+    Vec3f up_direction        = Vec3f(0.0,  1.0, 0.0).normalize();
     Vec3f front_direction     = Vec3f(1.0,  0.0, 1.0).normalize();
-    //Vec3f right_direction     = Vec3f(1.0,  0.0, 0.0).normalize();
-    //Vec3f left_direction      = Vec3f(-1.0, 0.0, 0.0).normalize();
+    Vec3f right_direction     = Vec3f(1.0,  0.0, 0.0).normalize();
+    Vec3f left_direction      = Vec3f(-1.0, 0.0, 0.0).normalize();
 
     // Vectors to store the shapes:
     std::vector<Sphere>     spheres;
@@ -298,12 +294,13 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     Vec3f camera = Vec3f(CAMERA_X,CAMERA_Y,CAMERA_Z);
 
     // Colors :
-    //Vec3f color_red    = Vec3f (1.0, 0.0, 0.0);
-    //Vec3f color_green  = Vec3f (0.0, 1.0, 0.0);
-    //Vec3f color_blue   = Vec3f (0.0, 0.0, 1.0);
+    Vec3f color_red    = Vec3f (1.0, 0.0, 0.0);
+    Vec3f color_green  = Vec3f (0.0, 1.0, 0.0);
+    Vec3f color_blue   = Vec3f (0.0, 0.0, 1.0);
 
-    Vec3f color_orange = Vec3f (1.0, 0.3, 0.0);
-    //Vec3f color_brown  = Vec3f (210/255.f,105/255.f,30/255.f);
+    Vec3f color_orange      = Vec3f (1.0, 0.3, 0.0);
+    Vec3f color_brown       = Vec3f (210/255.f,105/255.f,30/255.f);
+    Vec3f color_red_smooth  = Vec3f (233/255.f, 57/255.f, 57/255.f);
 
     Vec3f color_white  = Vec3f (1.0, 1.0, 1.0);
     Vec3f color_black  = Vec3f (0.15, 0.15, 0.15);
@@ -312,8 +309,9 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     // Materials : (basically , the texture used, might be useful to add some noise...)
     Material carrot_material  = Material(color_orange);
     Material hat_material     = Material(color_black);
+    Material hat_red_material = Material(color_red_smooth);
     Material button_material  = Material(color_black);
-    //Material arm_material     = Material(color_brown);
+    Material arm_material     = Material(color_brown);
     Material snow_material    = Material(color_white);
 
 
@@ -332,46 +330,48 @@ void render(const unsigned long width, const unsigned long height, float fov) {
 
 
     // Cylinder representing the carrot
-    Cylinder carrot_cylinder(Vec3f(0.0, 2.1, 0.0), front_direction, 0.03, 0.25, carrot_material);
+    Cylinder carrot_cylinder(Vec3f(0.0, 2.1, 0.0), front_direction, 0.05, 0.3, carrot_material);
     cylinders.push_back(carrot_cylinder);
 
 
     // Hat
-    Cylinder hat_top_cylinder    (Vec3f(0.0, 2.9, 0.0), up_direction, 0.4, 0.5 , hat_material);
-    Cylinder hat_bottom_cylinder (Vec3f(0.0, 2.7, 0.0), up_direction, 0.6, 0.05, hat_material);
+    Cylinder hat_top_cylinder    (Vec3f(0.0, 2.7, 0.0), up_direction, 0.4, 0.5 , hat_material);
+    Cylinder hat_middle_cylinder (Vec3f(0.0, 2.6, 0.0), up_direction, 0.4, 0.5 , hat_red_material);
+    Cylinder hat_bottom_cylinder (Vec3f(0.0, 2.6, 0.0), up_direction, 0.6, 0.05, hat_material);
     // Arms
-    //Cylinder right_arm_cylinder  (Vec3f( 1.0, 1.0, -0.1),right_direction, 0.1, 3.0 , arm_material);
-    //Cylinder left_arm_cylinder   (Vec3f(-1.0, 1.0, 0.1), left_direction,  0.1, 3.0 , arm_material);
+//    Cylinder right_arm_cylinder  (Vec3f( -1.0, 1.0, 1.0),right_direction, 0.1, 3.0 , arm_material);
+//    Cylinder left_arm_cylinder   (Vec3f(1.0, 1.0, -1.0), left_direction,  0.1, 3.0 , arm_material);
 
     cylinders.push_back(hat_top_cylinder);
+    cylinders.push_back(hat_middle_cylinder);
     cylinders.push_back(hat_bottom_cylinder);
-    //cylinders.push_back(right_arm_cylinder);
-    //cylinders.push_back(left_arm_cylinder);
+//    cylinders.push_back(right_arm_cylinder);
+//    cylinders.push_back(left_arm_cylinder);
 
     // Buttons
-    Cylinder button_1    (Vec3f(0.0, 0.7 , 0.0), front_direction, 0.1, 0.1 , button_material);
-    Cylinder button_2    (Vec3f(0.0, 1.05, 0.0), front_direction, 0.1, 0.1 , button_material);
-    Cylinder button_3    (Vec3f(0.0, 1.40, 0.0), front_direction, 0.1, 0.1 , button_material);
-
-    cylinders.push_back(button_1);
-    cylinders.push_back(button_2);
-    cylinders.push_back(button_3);
+    Sphere button_1    (Vec3f(0.45, 1.05, 0.70), 0.05, button_material);
+    Sphere button_2    (Vec3f(0.45, 1.30, 0.70), 0.05, button_material);
+    Sphere button_3    (Vec3f(0.45, 1.55, 0.70), 0.05, button_material);
+    spheres.push_back(button_1);
+    spheres.push_back(button_2);
+    spheres.push_back(button_3);
 
     // Eyes
-    Cylinder left_eye    (Vec3f(-0.2, 2.3,  0.1), front_direction, 0.1, 0.1 , button_material);
-    Cylinder right_eye   (Vec3f( 0.2, 2.3, -0.1), front_direction, 0.1, 0.1 , button_material);
-    cylinders.push_back(left_eye);
-    cylinders.push_back(right_eye);
+    Sphere left_eye    (Vec3f(0.05, 2.3, 0.65), 0.06, button_material);
+    Sphere right_eye   (Vec3f(0.65 , 2.3, 0.6), 0.06, button_material);
+    spheres.push_back(left_eye);
+    spheres.push_back(right_eye);
 
 
     #pragma omp parallel for
     for (size_t j = 0; j < height; j++) {
         for (size_t i = 0; i < width; i++) {
-            float x    =  (2 * (i + 0.5)/(float)width  - 1) * tan(fov/2.) * (float)width/(float)height;
-            float y    = -(2 * (j + 0.5)/(float)height - 1) * tan(fov/2.);
-
+            // Map the pixel coordinate to the viewport
+            float x = (2 * (i + 0.5) / (float)width - 1) * tan(fov / 2.) * width / (float)height;
+            float y = -(2 * (j + 0.5) / (float)height - 1) * tan(fov / 2.);
             // The direction in which we look.
-            Vec3f dir  = Vec3f(x, y, -1).normalize();
+            Vec3f dir = Vec3f(x, y, -1).normalize();
+
             // The computed color given by the cast_ray method.
             // It's either a random color (depends on lightning and textures)
             // or the background mask color.

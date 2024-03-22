@@ -17,8 +17,11 @@ template <typename T> struct vec<3,T> {
           T& operator[](const size_t i)       { assert(i<3); return i<=0 ? x : (1==i ? y : z); }
     const T& operator[](const size_t i) const { assert(i<3); return i<=0 ? x : (1==i ? y : z); }
     float norm() const { return std::sqrt(x*x+y*y+z*z); }
-    vec<3,T> & normalize(T l=1) { *this = (*this)*(l/norm()); return *this; }
+    vec<3,T> &  normalize(T l=1) { *this = (*this)*(l/norm()); return *this; }
     float dot(vec<3,T> a) const {return a[0] * x + a[1] * y + a[0] * z; }
+    float dot(const vec<3,T>& a, const vec<3,T>& b) const {
+        return a[0] * x + a[1] * y + a[2] * z + b[0] * x + b[1] * y + b[2] * z;
+    }
     T x,y,z;
 };
 
