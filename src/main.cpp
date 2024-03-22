@@ -196,23 +196,26 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     Vec3f color_red    = Vec3f (1.0, 0.0, 0.0);
     Vec3f color_green  = Vec3f (0.0, 1.0, 0.0);
     Vec3f color_blue   = Vec3f (0.0, 0.0, 1.0);
+    Vec3f color_orange = Vec3f (1.0, 1.0, 0.0);
+    
     Vec3f color_white  = Vec3f (1.0, 1.0, 1.0);
-    Vec3f bg_color     = Vec3f(0.2, 0.7, 0.8);
+    Vec3f color_black  = Vec3f (0.0, 0.0, 0.0);
+    Vec3f bg_color     = Vec3f (0.2, 0.7, 0.8);
 
     // SHAPES :
     // Snowman Spheres :
-    Sphere base_sphere  (Vec3f(0.0, 0.0, 0.0), BASE_SPHERE_RADIUS,  Material(color_white));
-    Sphere torso_sphere (Vec3f(0.0, 1.1, 0.0), TORSO_SPHERE_RADIUS, Material(color_white));
-    Sphere head_sphere  (Vec3f(0.0, 2.2, 0.0), HEAD_SPHERE_RADIUS,  Material(color_white));
+    Sphere base_sphere  (Vec3f(0.0, 0.0, 0.0), BASE_SPHERE_RADIUS,  Material(color_red));
+    Sphere torso_sphere (Vec3f(0.0, 1.1, 0.0), TORSO_SPHERE_RADIUS, Material(color_green));
+    Sphere head_sphere  (Vec3f(0.0, 2.2, 0.0), HEAD_SPHERE_RADIUS,  Material(color_blue));
     std::vector<Sphere> spheres;
     spheres.push_back(base_sphere);
     spheres.push_back(torso_sphere);
     spheres.push_back(head_sphere);
 
     // Carrot
-    Cone hat_cone(Vec3f(0.0, 3.5, 0.0), Vec3f(0.0, 1.0, 0.0), M_PI / 4, Material(color_blue));
+    Cone carrot(Vec3f(0.0, 2.5, 0.0), Vec3f(0.0, 0.5, 1.0).normalize(), M_PI / 4, Material(color_orange));
     std::vector<Cone> cones;
-    cones.push_back(hat_cone);
+    cones.push_back(carrot);
 
     // Hat
 
@@ -222,7 +225,7 @@ void render(const unsigned long width, const unsigned long height, float fov) {
 
     // LIGHTNING
     std::vector<Light> lights;
-    lights.push_back(Light(Vec3f(-5, 5,  5), 1.0));
+    lights.push_back(Light(Vec3f(-9, 10,  -8), 1.1));
 
     // Camera position
     Vec3f camera = Vec3f(CAMERA_X,CAMERA_Y,CAMERA_Z);
@@ -235,6 +238,7 @@ void render(const unsigned long width, const unsigned long height, float fov) {
             Vec3f dir  = Vec3f(x, y, -1).normalize();
             Vec3f color = cast_ray(camera, dir, spheres, cones, lights);
 
+            // We ensure that we do not modify the background.
             if (!(color.x >= bg_color.x - threshold && color.x <= bg_color.x + threshold &&
                 color.y >= bg_color.y - threshold && color.y <= bg_color.y + threshold &&
                 color.z >= bg_color.z - threshold && color.z <= bg_color.z + threshold
