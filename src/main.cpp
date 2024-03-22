@@ -258,7 +258,7 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     std::vector<Vec3f> framebuffer(width*height);
 
     // Threshold for the background mask :
-    float threshold = 0.1f;
+    float threshold = MASK_THRESHOLD;
     // Some useful vectors.
     Vec3f up_direction        = Vec3f(0.0,  0.0, 0.0).normalize();
     Vec3f right_direction     = Vec3f(1.0,  0.0, 0.0).normalize();
@@ -268,6 +268,14 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     std::vector<Sphere>     spheres;
     std::vector<Cone>       cones;
     std::vector<Cylinder>   cylinders;
+
+    // Light sources
+    std::vector<Light> lights;
+    Light main_light = Light(Vec3f(MAIN_LIGHT_X, MAIN_LIGHT_Y, MAIN_LIGHT_Z), MAIN_LIGHT_INTENSITY);
+    lights.push_back(main_light);
+
+    // Camera position
+    Vec3f camera = Vec3f(CAMERA_X,CAMERA_Y,CAMERA_Z);
 
     // Colors :
     Vec3f color_red    = Vec3f (1.0, 0.0, 0.0);
@@ -282,10 +290,10 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     Vec3f bg_color     = Vec3f (0.2, 0.7, 0.8);
 
     // Materials : (basically , the texture used, might be useful to add some noise...)
-    Material carrot_material     = Material(color_orange);
-    Material hat_material        = Material(color_black);
-    Material arm_material        = Material(color_brown);
-    Material snow_material       = Material(color_white);
+    Material carrot_material  = Material(color_orange);
+    Material hat_material     = Material(color_black);
+    Material arm_material     = Material(color_brown);
+    Material snow_material    = Material(color_white);
 
 
 
@@ -319,22 +327,22 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     cylinders.push_back(right_arm_cylinder);
     cylinders.push_back(left_arm_cylinder);
 
-    // LIGHTNING
-    std::vector<Light> lights;
-    lights.push_back(Light(Vec3f(-9, 10,  -8), 1.1));
 
-    // Camera position
-    Vec3f camera = Vec3f(CAMERA_X,CAMERA_Y,CAMERA_Z);
 
     #pragma omp parallel for
     for (size_t j = 0; j < height; j++) {
         for (size_t i = 0; i < width; i++) {
             float x    =  (2 * (i + 0.5)/(float)width  - 1) * tan(fov/2.) * (float)width/(float)height;
             float y    = -(2 * (j + 0.5)/(float)height - 1) * tan(fov/2.);
+
+            // The direction in which we look.
             Vec3f dir  = Vec3f(x, y, -1).normalize();
+            // The computed color given by the cast_ray method.
+            // It's either a random color (depends on lightning and textures)
+            // or the background mask color.
             Vec3f color = cast_ray(camera, dir, spheres, cones, cylinders, lights);
 
-            // We ensure that we do not modify the background.
+            // We ensure that we do not modify the background using the mask.
             if (!(color.x >= bg_color.x - threshold && color.x <= bg_color.x + threshold &&
                 color.y >= bg_color.y - threshold && color.y <= bg_color.y + threshold &&
                 color.z >= bg_color.z - threshold && color.z <= bg_color.z + threshold
