@@ -321,8 +321,8 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     Cylinder hat_top_cylinder    (Vec3f(0.0, 2.9, 0.0), up_direction, 0.4, 0.5 , hat_material);
     Cylinder hat_bottom_cylinder (Vec3f(0.0, 2.7, 0.0), up_direction, 0.6, 0.05, hat_material);
     // Arms
-    Cylinder right_arm_cylinder    (Vec3f(1.0, 1.0, 0.0), right_direction, 0.1, 3.0 , arm_material);
-    Cylinder left_arm_cylinder     (Vec3f(-1.0, 1.0,0.0), left_direction,  0.1, 3.0 , arm_material);
+    Cylinder right_arm_cylinder    (Vec3f( 1.0, 1.0, -0.1), right_direction, 0.1, 3.0 , arm_material);
+    Cylinder left_arm_cylinder     (Vec3f(-1.0, 1.0, 0.1), left_direction,  0.1, 3.0 , arm_material);
 
     cylinders.push_back(hat_top_cylinder);
     cylinders.push_back(hat_bottom_cylinder);
@@ -339,8 +339,8 @@ void render(const unsigned long width, const unsigned long height, float fov) {
     cylinders.push_back(button_3);
 
     // Eyes
-    Cylinder left_eye    (Vec3f(-0.2, 2.3, 0.0), front_direction, 0.1, 0.1 , button_material);
-    Cylinder right_eye   (Vec3f( 0.2, 2.3, 0.0), front_direction, 0.1, 0.1 , button_material);
+    Cylinder left_eye    (Vec3f(-0.2, 2.3,  0.1), front_direction, 0.1, 0.1 , button_material);
+    Cylinder right_eye   (Vec3f( 0.2, 2.3, -0.1), front_direction, 0.1, 0.1 , button_material);
     cylinders.push_back(left_eye);
     cylinders.push_back(right_eye);
 
